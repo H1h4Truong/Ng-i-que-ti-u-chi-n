@@ -83,6 +83,10 @@ class Character(pygame.sprite.Sprite):
         # Thêm cờ để kiểm tra xem phím phòng thủ có đang được giữ hay không
         self.is_defend_key_held = False 
 
+        # --- Thuộc tính khiên (shield) mới ---
+        self.shield_max_hits = 3      # Số lần khiên đỡ được
+        self.shield_hits_left = self.shield_max_hits
+
     def _load_animations(self, anim_config):
         for anim_name, config in anim_config.items():
             path = config["path"]
@@ -234,7 +238,6 @@ class Character(pygame.sprite.Sprite):
     def start_attack_direct(self):
         current_time = pygame.time.get_ticks()
         if current_time - self.last_attack_time < self.attack_cooldown:
-            # print(f"DEBUG: {self.owner_type} đang trong cooldown tấn công.")
             return
 
         if self.action_state == "idle" and not self.is_defending and not self.is_showing_hit and self.is_alive:
@@ -244,12 +247,28 @@ class Character(pygame.sprite.Sprite):
             
             # --- LOGIC TRỪ HP NGAY LẬP TỨC KHI TẤN CÔNG KHỞI TẠO ---
             if self.opponent and self.opponent.is_alive:
-                if self.opponent.is_defending:
+                if self.opponent.is_defending and self.opponent.shield_hits_left > 0:
                     damage_to_deal = 0  # Chặn hoàn toàn sát thương khi phòng thủ
-                    print(f"DEBUG: {self.owner_type} tấn công. {self.opponent.owner_type} đang phòng thủ. Không gây sát thương.")
+                    self.opponent.shield_hits_left -= 1
+                    print(f"DEBUG: {self.owner_type} tấn công. {self.opponent.owner_type} đang phòng thủ. Khiên còn lại: {self.opponent.shield_hits_left}. Không gây sát thương.")
                     self.opponent.take_damage(damage_to_deal)
-                    # KHÔNG GỌI stop_defend() NẾU PHÍM PHÒNG THỦ ĐANG ĐƯỢC GIỮ
-                    # self.opponent.stop_defend() # Dừng phòng thủ sau khi nhận hit
+                    if self.opponent.shield_hits_left == 0:
+                        print(f"DEBUG: {self.opponent.owner_type} đã hết khiên! Phòng thủ không còn hiệu lực.")
+                        self.opponent.stop_defend()
+                elif self.opponent.is_defending and self.opponent.shield_hits_left <= 0:
+                    damage_to_deal = 10
+                    print(f"DEBUG: {self.owner_type} tấn công. {self.opponent.owner_type} đang phòng thủ nhưng đã hết khiên. Gây {damage_to_deal} sát thương.")
+                    self.opponent.take_damage(damage_to_deal)
+                    # Nếu không phòng thủ, hiển thị hit_image
+                    if self.opponent.is_alive and self.opponent.hit_image:
+                        self.opponent.is_showing_hit = True
+                        self.opponent.action_state = "hit"
+                        self.opponent.hit_start_time = pygame.time.get_ticks()
+                        self.opponent.image = self.opponent.hit_image
+                        self.opponent.rect = self.opponent.image.get_rect(topleft=(self.opponent.x, self.opponent.y))
+                    else:
+                        self.opponent.action_state = "idle" # Nếu chết hoặc không có hit_image, về idle
+                        self.opponent.set_animation("idle")
                 else:
                     damage_to_deal = 25
                     print(f"DEBUG: {self.owner_type} tấn công. {self.opponent.owner_type} không phòng thủ. Gây {damage_to_deal} sát thương.")
